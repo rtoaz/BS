@@ -1,0 +1,987 @@
+repeat task.wait() until game:IsLoaded()
+
+local library = {}
+library.currentTab = nil
+library.flags = {}
+
+local services = setmetatable({}, {
+    __index = function(t, k)
+        return game.GetService(game, k)
+    end
+})
+
+local mouse = services.Players.LocalPlayer:GetMouse()
+local TweenService = services.TweenService
+
+local function Tween(obj, t, data)
+    TweenService:Create(obj, TweenInfo.new(t[1], Enum.EasingStyle[t[2]], Enum.EasingDirection[t[3]]), data):Play()
+    return true
+end
+
+local Creator = {}
+function Creator.New(className, properties, children)
+    local instance = Instance.new(className)
+    for prop, value in pairs(properties or {}) do
+        if prop ~= "ThemeTag" then
+            instance[prop] = value
+        end
+    end
+    
+    if properties and properties.ThemeTag then
+        for prop, colorName in pairs(properties.ThemeTag) do
+            local colors = {
+                Background = Color3.fromRGB(30, 30, 30),
+                ElementBackground = Color3.fromRGB(35, 35, 35),
+                Primary = Color3.fromRGB(129, 90, 220),
+                Text = Color3.fromRGB(240, 240, 240),
+                Icon = Color3.fromRGB(200, 200, 200),
+                Hover = Color3.fromRGB(45, 45, 45)
+            }
+            instance[prop] = colors[colorName] or Color3.fromRGB(255,255,255)
+        end
+    end
+    
+    if children then
+        for _, child in ipairs(children) do
+            child.Parent = instance
+        end
+    end
+    return instance
+end
+
+function Creator.NewRoundFrame(cornerRadius, style, properties, children)
+    local frame = Creator.New("ImageLabel", {
+        Name = style or "Squircle",
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://80999662900595",
+        ImageColor3 = properties.ImageColor3 or Color3.fromRGB(255,255,255),
+        ImageTransparency = properties.ImageTransparency or 0,
+        ScaleType = Enum.ScaleType.Slice,
+        SliceCenter = Rect.new(99, 99, 99, 99),
+        Size = properties.Size or UDim2.new(1,0,1,0),
+        Position = properties.Position or UDim2.new(0,0,0,0),
+        AnchorPoint = properties.AnchorPoint or Vector2.new(0,0),
+        ZIndex = properties.ZIndex or 1,
+        Parent = properties.Parent
+    })
+    
+    if not properties.NoOutline then
+        local outline = Creator.New("ImageLabel", {
+            Name = "Outline",
+            BackgroundTransparency = 1,
+            Image = "rbxassetid://117817408534198",
+            ImageColor3 = Color3.fromRGB(129, 90, 220),
+            ImageTransparency = 0.9,
+            ScaleType = Enum.ScaleType.Slice,
+            SliceCenter = Rect.new(99, 99, 99, 99),
+            Size = UDim2.new(1,0,1,0),
+            ZIndex = frame.ZIndex - 1,
+            Parent = frame
+        })
+        
+        Creator.New("UIGradient", {
+            Rotation = 45,
+            Color = ColorSequence.new{
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(129, 90, 220)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(88, 101, 242)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(129, 90, 220))
+            },
+            Transparency = NumberSequence.new{
+                NumberSequenceKeypoint.new(0, 0.1),
+                NumberSequenceKeypoint.new(0.5, 1),
+                NumberSequenceKeypoint.new(1, 0.1)
+            },
+            Parent = outline
+        })
+    end
+    
+    if children then
+        for _, child in ipairs(children) do
+            child.Parent = frame
+        end
+    end
+    return frame
+end
+
+local switchingTabs = false
+function switchTab(new)
+    if switchingTabs then return end
+    local old = library.currentTab
+    if old == nil then
+        new[2].Visible = true
+        library.currentTab = new
+        Tween(new[1], {0.3, "Quint", "Out"}, {ImageTransparency = 0})
+        Tween(new[1].TextLabel, {0.3, "Quint", "Out"}, {TextTransparency = 0})
+        Tween(new[1].ImageLabel, {0.3, "Quint", "Out"}, {ImageTransparency = 0})
+        return
+    end
+    
+    if old[1] == new[1] then return end
+    switchingTabs = true
+    library.currentTab = new
+
+    Tween(old[1], {0.2, "Quint", "Out"}, {ImageTransparency = 0.7})
+    Tween(new[1], {0.2, "Quint", "Out"}, {ImageTransparency = 0})
+    Tween(old[1].TextLabel, {0.2, "Quint", "Out"}, {TextTransparency = 0.3})
+    Tween(new[1].TextLabel, {0.2, "Quint", "Out"}, {TextTransparency = 0})
+    Tween(old[1].ImageLabel, {0.2, "Quint", "Out"}, {ImageTransparency = 0.3})
+    Tween(new[1].ImageLabel, {0.2, "Quint", "Out"}, {ImageTransparency = 0})
+
+    old[2].Visible = false
+    new[2].Visible = true
+    
+    task.wait(0.2)
+    switchingTabs = false
+end
+
+function drag(frame, hold)
+    if not hold then hold = frame end
+    local dragging
+    local dragInput
+    local dragStart
+    local startPos
+
+    local function update(input)
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+
+    hold.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+
+    services.UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            update(input)
+        end
+    end)
+end
+
+function library.new(library, name, theme)
+    for _, v in next, services.CoreGui:GetChildren() do
+        if v.Name == "WindUI_Style" then
+            v:Destroy()
+        end
+    end
+    
+    local MainColor = Color3.fromRGB(25, 25, 25)
+    local Background = Color3.fromRGB(25, 25, 25)
+    local zyColor = Color3.fromRGB(35, 35, 35)
+    local ALcolor = Color3.fromRGB(240, 240, 240)
+    local ALTransparency = 0.6
+    
+    local dogent = Instance.new("ScreenGui")
+    dogent.Name = "WindUI_Style"
+    if syn and syn.protect_gui then syn.protect_gui(dogent) end
+    dogent.Parent = services.CoreGui
+    
+    local Main = Creator.NewRoundFrame(16, "Squircle", {
+        Name = "Main",
+        Size = UDim2.new(0, 572, 0, 353),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        ImageColor3 = Background,
+        ImageTransparency = 0.1,
+        Parent = dogent,
+        ZIndex = 2
+    })
+    
+    local DropShadow = Instance.new("ImageLabel")
+    DropShadow.Name = "DropShadow"
+    DropShadow.Parent = Main
+    DropShadow.AnchorPoint = Vector2.new(0.5, 0.5)
+    DropShadow.BackgroundTransparency = 1
+    DropShadow.Position = UDim2.new(0.5, 0, 0.5, 0)
+    DropShadow.Size = UDim2.new(1, 40, 1, 40)
+    DropShadow.ZIndex = 0
+    DropShadow.Image = "rbxassetid://8992230677"
+    DropShadow.ImageColor3 = Color3.new(0,0,0)
+    DropShadow.ImageTransparency = 0.6
+    DropShadow.ScaleType = Enum.ScaleType.Slice
+    DropShadow.SliceCenter = Rect.new(99, 99, 99, 99)
+    
+    local TopBar = Instance.new("Frame")
+    TopBar.Name = "TopBar"
+    TopBar.Parent = Main
+    TopBar.BackgroundColor3 = Color3.fromRGB(129, 90, 220)
+    TopBar.BorderSizePixel = 0
+    TopBar.Size = UDim2.new(1, 0, 0, 2)
+    TopBar.Position = UDim2.new(0, 0, 0, 0)
+    TopBar.ZIndex = 3
+    
+    Instance.new("UIGradient", TopBar).Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(88, 101, 242)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(129, 90, 220)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(88, 101, 242))
+    }
+    
+    local SideBar = Creator.NewRoundFrame(12, "Squircle", {
+        Parent = Main,
+        Size = UDim2.new(0, 120, 1, -20),
+        Position = UDim2.new(0, 10, 0, 10),
+        ImageColor3 = zyColor,
+        ImageTransparency = 0.3,
+        ZIndex = 2
+    })
+    
+    local ScriptTitle = Instance.new("TextLabel")
+    ScriptTitle.Parent = SideBar
+    ScriptTitle.BackgroundTransparency = 1
+    ScriptTitle.Position = UDim2.new(0, 10, 0, 10)
+    ScriptTitle.Size = UDim2.new(1, -20, 0, 30)
+    ScriptTitle.Font = Enum.Font.GothamBold
+    ScriptTitle.Text = name
+    ScriptTitle.TextColor3 = ALcolor
+    ScriptTitle.TextSize = 18
+    ScriptTitle.TextXAlignment = Enum.TextXAlignment.Left
+    
+    Instance.new("UIGradient", ScriptTitle).Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(129, 90, 220)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(192, 130, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(129, 90, 220))
+    }
+    
+    local TabBtns = Instance.new("ScrollingFrame")
+    TabBtns.Name = "TabBtns"
+    TabBtns.Parent = SideBar
+    TabBtns.Active = true
+    TabBtns.BackgroundTransparency = 1
+    TabBtns.Position = UDim2.new(0, 5, 0, 50)
+    TabBtns.Size = UDim2.new(1, -10, 1, -60)
+    TabBtns.ScrollBarThickness = 0
+    TabBtns.CanvasSize = UDim2.new(0, 0, 0, 0)
+    
+    local TabBtnsL = Instance.new("UIListLayout")
+    TabBtnsL.Parent = TabBtns
+    TabBtnsL.SortOrder = Enum.SortOrder.LayoutOrder
+    TabBtnsL.Padding = UDim.new(0, 8)
+    
+    local TabMain = Creator.NewRoundFrame(12, "Squircle", {
+        Parent = Main,
+        Size = UDim2.new(1, -150, 1, -20),
+        Position = UDim2.new(0, 140, 0, 10),
+        ImageColor3 = zyColor,
+        ImageTransparency = 0.2,
+        ZIndex = 2
+    })
+    
+    local Open = Instance.new("ImageButton")
+    Open.Parent = dogent
+    Open.BackgroundColor3 = Color3.fromRGB(129, 90, 220)
+    Open.Position = UDim2.new(0, 20, 0, 20)
+    Open.Size = UDim2.new(0, 50, 0, 50)
+    Open.Image = "rbxassetid://104756179251351"
+    Open.ImageColor3 = Color3.fromRGB(255,255,255)
+    Open.ZIndex = 10
+    Instance.new("UICorner", Open).CornerRadius = UDim.new(1,0)
+    local OpenStroke = Instance.new("UIStroke", Open)
+    OpenStroke.Color = Color3.fromRGB(129, 90, 220)
+    OpenStroke.Thickness = 2
+    OpenStroke.Transparency = 0.5
+    
+    Open.MouseEnter:Connect(function()
+        Tween(Open, {0.2, "Quint", "Out"}, {Size = UDim2.new(0, 55, 0, 55)})
+        Tween(OpenStroke, {0.2, "Quint", "Out"}, {Transparency = 0})
+    end)
+    Open.MouseLeave:Connect(function()
+        Tween(Open, {0.2, "Quint", "Out"}, {Size = UDim2.new(0, 50, 0, 50)})
+        Tween(OpenStroke, {0.2, "Quint", "Out"}, {Transparency = 0.5})
+    end)
+    Open.MouseButton1Click:Connect(function()
+        Main.Visible = not Main.Visible
+        if Main.Visible then
+            Tween(Main, {0.3, "Back", "Out"}, {Size = UDim2.new(0, 572, 0, 353)})
+        end
+    end)
+    
+    drag(Main)
+    
+    services.UserInputService.InputEnded:Connect(function(input)
+        if input.KeyCode == Enum.KeyCode.LeftControl then
+            Main.Visible = not Main.Visible
+        end
+    end)
+    
+    local window = {}
+    function window.Tab(window, name, icon)
+        local Tab = Instance.new("ScrollingFrame")
+        Tab.Name = "Tab"
+        Tab.Parent = TabMain
+        Tab.Active = true
+        Tab.BackgroundTransparency = 1
+        Tab.Size = UDim2.new(1, 0, 1, 0)
+        Tab.ScrollBarThickness = 2
+        Tab.ScrollBarImageColor3 = Color3.fromRGB(129, 90, 220)
+        Tab.CanvasSize = UDim2.new(0, 0, 0, 0)
+        Tab.Visible = false
+        
+        local TabL = Instance.new("UIListLayout")
+        TabL.Parent = Tab
+        TabL.SortOrder = Enum.SortOrder.LayoutOrder
+        TabL.Padding = UDim.new(0, 10)
+        TabL.HorizontalAlignment = Enum.HorizontalAlignment.Center
+        
+        TabL:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            Tab.CanvasSize = UDim2.new(0, 0, 0, TabL.AbsoluteContentSize.Y + 20)
+        end)
+        
+        local TabIco = Creator.NewRoundFrame(8, "Squircle", {
+            Parent = TabBtns,
+            Size = UDim2.new(1, -10, 0, 36),
+            ImageColor3 = Color3.fromRGB(255,255,255),
+            ImageTransparency = 1,
+            ZIndex = 3
+        })
+        
+        local IconImg = Instance.new("ImageLabel")
+        IconImg.Parent = TabIco
+        IconImg.BackgroundTransparency = 1
+        IconImg.Size = UDim2.new(0, 20, 0, 20)
+        IconImg.Position = UDim2.new(0, 10, 0.5, -10)
+        IconImg.Image = icon and "rbxassetid://"..icon or "rbxassetid://70754573667061"
+        IconImg.ImageColor3 = ALcolor
+        IconImg.ImageTransparency = 0.3
+        
+        local TabText = Instance.new("TextLabel")
+        TabText.Parent = TabIco
+        TabText.BackgroundTransparency = 1
+        TabText.Position = UDim2.new(0, 36, 0, 0)
+        TabText.Size = UDim2.new(1, -46, 1, 0)
+        TabText.Font = Enum.Font.GothamSemibold
+        TabText.Text = name
+        TabText.TextColor3 = ALcolor
+        TabText.TextSize = 14
+        TabText.TextTransparency = 0.3
+        TabText.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local TabBtn = Instance.new("TextButton")
+        TabBtn.Parent = TabIco
+        TabBtn.BackgroundTransparency = 1
+        TabBtn.Size = UDim2.new(1, 0, 1, 0)
+        TabBtn.Text = ""
+        
+        TabBtn.MouseEnter:Connect(function()
+            if library.currentTab == nil or library.currentTab[1] ~= TabIco then
+                Tween(TabIco, {0.2, "Quint", "Out"}, {ImageTransparency = 0.9})
+                Tween(IconImg, {0.2, "Quint", "Out"}, {ImageTransparency = 0.1})
+                Tween(TabText, {0.2, "Quint", "Out"}, {TextTransparency = 0.1})
+            end
+        end)
+        
+        TabBtn.MouseLeave:Connect(function()
+            if library.currentTab == nil or library.currentTab[1] ~= TabIco then
+                Tween(TabIco, {0.2, "Quint", "Out"}, {ImageTransparency = 1})
+                Tween(IconImg, {0.2, "Quint", "Out"}, {ImageTransparency = 0.3})
+                Tween(TabText, {0.2, "Quint", "Out"}, {TextTransparency = 0.3})
+            end
+        end)
+        
+        TabBtn.MouseButton1Click:Connect(function()
+            switchTab({TabIco, Tab})
+        end)
+        
+        if library.currentTab == nil then switchTab({TabIco, Tab}) end
+        
+        TabBtnsL:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            TabBtns.CanvasSize = UDim2.new(0, 0, 0, TabBtnsL.AbsoluteContentSize.Y + 18)
+        end)
+        
+        local tab = {}
+        function tab.section(tab, name, TabVal)
+            local Section = Creator.NewRoundFrame(10, "Squircle", {
+                Parent = Tab,
+                Size = UDim2.new(0.95, 0, 0, 40),
+                ImageColor3 = zyColor,
+                ImageTransparency = 0.1,
+                ClipsDescendants = true
+            })
+            
+            local SectionText = Instance.new("TextButton")
+            SectionText.Parent = Section
+            SectionText.BackgroundTransparency = 1
+            SectionText.Size = UDim2.new(1, 0, 0, 40)
+            SectionText.Text = ""
+            
+            local SectionIcon = Instance.new("ImageLabel")
+            SectionIcon.Parent = SectionText
+            SectionIcon.BackgroundTransparency = 1
+            SectionIcon.Size = UDim2.new(0, 20, 0, 20)
+            SectionIcon.Position = UDim2.new(0, 15, 0.5, -10)
+            SectionIcon.Image = "rbxassetid://110294969167654"
+            SectionIcon.ImageColor3 = Color3.fromRGB(129, 90, 220)
+            
+            local SectionLbl = Instance.new("TextLabel")
+            SectionLbl.Parent = SectionText
+            SectionLbl.BackgroundTransparency = 1
+            SectionLbl.Position = UDim2.new(0, 45, 0, 0)
+            SectionLbl.Size = UDim2.new(1, -80, 0, 40)
+            SectionLbl.Font = Enum.Font.GothamBold
+            SectionLbl.Text = name
+            SectionLbl.TextColor3 = ALcolor
+            SectionLbl.TextSize = 16
+            SectionLbl.TextXAlignment = Enum.TextXAlignment.Left
+            
+            local ToggleIcon = Instance.new("ImageLabel")
+            ToggleIcon.Parent = SectionText
+            ToggleIcon.BackgroundTransparency = 1
+            ToggleIcon.Size = UDim2.new(0, 20, 0, 20)
+            ToggleIcon.Position = UDim2.new(1, -35, 0.5, -10)
+            ToggleIcon.Image = "rbxassetid://7072706633"
+            ToggleIcon.ImageColor3 = Color3.fromRGB(150, 150, 150)
+            ToggleIcon.Rotation = TabVal ~= false and 180 or 0
+            
+            local Objs = Instance.new("Frame")
+            Objs.Parent = Section
+            Objs.BackgroundTransparency = 1
+            Objs.Position = UDim2.new(0, 10, 0, 45)
+            Objs.Size = UDim2.new(1, -20, 1, -50)
+            
+            local ObjsL = Instance.new("UIListLayout")
+            ObjsL.Parent = Objs
+            ObjsL.SortOrder = Enum.SortOrder.LayoutOrder
+            ObjsL.Padding = UDim.new(0, 8)
+            
+            local open = TabVal ~= false
+            local function updateSize()
+                if open then
+                    Tween(Section, {0.3, "Quint", "Out"}, {Size = UDim2.new(0.95, 0, 0, 50 + ObjsL.AbsoluteContentSize.Y)})
+                    Tween(ToggleIcon, {0.3, "Quint", "Out"}, {Rotation = 180})
+                else
+                    Tween(Section, {0.3, "Quint", "Out"}, {Size = UDim2.new(0.95, 0, 0, 40)})
+                    Tween(ToggleIcon, {0.3, "Quint", "Out"}, {Rotation = 0})
+                end
+            end
+            
+            SectionText.MouseButton1Click:Connect(function()
+                open = not open
+                updateSize()
+            end)
+            
+            ObjsL:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                if open then
+                    Tween(Section, {0.3, "Quint", "Out"}, {Size = UDim2.new(0.95, 0, 0, 50 + ObjsL.AbsoluteContentSize.Y)})
+                end
+            end)
+            
+            local section = {}
+            
+            function section.Button(section, text, callback)
+                local callback = callback or function() end
+                local Btn = Creator.NewRoundFrame(8, "Squircle", {
+                    Parent = Objs,
+                    Size = UDim2.new(1, 0, 0, 38),
+                    ImageColor3 = Color3.fromRGB(129, 90, 220),
+                    ImageTransparency = 0.7
+                })
+                
+                local BtnText = Instance.new("TextLabel")
+                BtnText.Parent = Btn
+                BtnText.BackgroundTransparency = 1
+                BtnText.Size = UDim2.new(1, 0, 1, 0)
+                BtnText.Font = Enum.Font.GothamSemibold
+                BtnText.Text = text
+                BtnText.TextColor3 = ALcolor
+                BtnText.TextSize = 15
+                
+                Btn.MouseEnter:Connect(function()
+                    Tween(Btn, {0.2, "Quint", "Out"}, {ImageTransparency = 0.5})
+                end)
+                Btn.MouseLeave:Connect(function()
+                    Tween(Btn, {0.2, "Quint", "Out"}, {ImageTransparency = 0.7})
+                end)
+                
+                local BtnHit = Instance.new("TextButton")
+                BtnHit.Parent = Btn
+                BtnHit.BackgroundTransparency = 1
+                BtnHit.Size = UDim2.new(1, 0, 1, 0)
+                BtnHit.Text = ""
+                BtnHit.MouseButton1Click:Connect(function()
+                    Tween(Btn, {0.1, "Quint", "Out"}, {Size = UDim2.new(1, -4, 0, 34), Position = UDim2.new(0, 2, 0, 2)})
+                    task.wait(0.1)
+                    Tween(Btn, {0.1, "Quint", "Out"}, {Size = UDim2.new(1, 0, 0, 38), Position = UDim2.new(0, 0, 0, 0)})
+                    task.spawn(callback)
+                end)
+            end
+            
+            function section:Label(text)
+                local LabelModule = Creator.NewRoundFrame(6, "Squircle", {
+                    Parent = Objs,
+                    Size = UDim2.new(1, 0, 0, 30),
+                    ImageColor3 = zyColor,
+                    ImageTransparency = 0.5
+                })
+                
+                local TextLabel = Instance.new("TextLabel")
+                TextLabel.Parent = LabelModule
+                TextLabel.BackgroundTransparency = 1
+                TextLabel.Size = UDim2.new(1, -20, 1, 0)
+                TextLabel.Position = UDim2.new(0, 10, 0, 0)
+                TextLabel.Font = Enum.Font.Gotham
+                TextLabel.Text = text
+                TextLabel.TextColor3 = ALcolor
+                TextLabel.TextSize = 14
+                TextLabel.TextXAlignment = Enum.TextXAlignment.Left
+                
+                return TextLabel
+            end
+            
+            function section.Toggle(section, text, flag, enabled, callback)
+                local callback = callback or function() end
+                local enabled = enabled or false
+                library.flags[flag] = enabled
+                
+                local ToggleModule = Creator.NewRoundFrame(8, "Squircle", {
+                    Parent = Objs,
+                    Size = UDim2.new(1, 0, 0, 40),
+                    ImageColor3 = zyColor,
+                    ImageTransparency = 0.3
+                })
+                
+                local ToggleText = Instance.new("TextLabel")
+                ToggleText.Parent = ToggleModule
+                ToggleText.BackgroundTransparency = 1
+                ToggleText.Size = UDim2.new(0.7, 0, 1, 0)
+                ToggleText.Position = UDim2.new(0, 15, 0, 0)
+                ToggleText.Font = Enum.Font.GothamSemibold
+                ToggleText.Text = text
+                ToggleText.TextColor3 = ALcolor
+                ToggleText.TextSize = 15
+                ToggleText.TextXAlignment = Enum.TextXAlignment.Left
+                
+                local ToggleBg = Creator.NewRoundFrame(12, "Squircle", {
+                    Parent = ToggleModule,
+                    Size = UDim2.new(0, 44, 0, 24),
+                    Position = UDim2.new(1, -59, 0.5, -12),
+                    ImageColor3 = Color3.fromRGB(60, 60, 60),
+                    ImageTransparency = 0.3
+                })
+                
+                local ToggleKnob = Creator.NewRoundFrame(12, "Squircle", {
+                    Parent = ToggleBg,
+                    Size = UDim2.new(0, 20, 0, 20),
+                    Position = UDim2.new(0, 2, 0.5, -10),
+                    ImageColor3 = Color3.fromRGB(255, 255, 255)
+                })
+                
+                local funcs = {
+                    SetState = function(self, state)
+                        if state == nil then state = not library.flags[flag] end
+                        if library.flags[flag] == state then return end
+                        library.flags[flag] = state
+                        if state then
+                            Tween(ToggleBg, {0.2, "Quint", "Out"}, {ImageColor3 = Color3.fromRGB(129, 90, 220)})
+                            Tween(ToggleKnob, {0.2, "Quint", "Out"}, {Position = UDim2.new(0, 22, 0.5, -10)})
+                        else
+                            Tween(ToggleBg, {0.2, "Quint", "Out"}, {ImageColor3 = Color3.fromRGB(60, 60, 60)})
+                            Tween(ToggleKnob, {0.2, "Quint", "Out"}, {Position = UDim2.new(0, 2, 0.5, -10)})
+                        end
+                        callback(state)
+                    end,
+                    Module = ToggleModule
+                }
+                
+                if enabled then
+                    funcs:SetState(true)
+                end
+                
+                local ToggleBtn = Instance.new("TextButton")
+                ToggleBtn.Parent = ToggleModule
+                ToggleBtn.BackgroundTransparency = 1
+                ToggleBtn.Size = UDim2.new(1, 0, 1, 0)
+                ToggleBtn.Text = ""
+                ToggleBtn.MouseButton1Click:Connect(function()
+                    funcs:SetState()
+                end)
+                
+                return funcs
+            end
+            
+            function section.Keybind(section, text, default, callback)
+                local callback = callback or function() end
+                local default = default or "None"
+                local banned = {Return = true, Space = true, Tab = true, Backquote = true, CapsLock = true, Escape = true, Unknown = true}
+                local shortNames = {
+                    RightControl = 'Right Ctrl', LeftControl = 'Left Ctrl', LeftShift = 'Left Shift',
+                    RightShift = 'Right Shift', Semicolon = ";", Quote = '"', LeftBracket = '[',
+                    RightBracket = ']', Equals = '=', Minus = '-', RightAlt = 'Right Alt', LeftAlt = 'Left Alt'
+                }
+                
+                local bindKey = typeof(default) == "string" and Enum.KeyCode[default] or default
+                local keyTxt = (default and (shortNames[default] or default) or "None")
+                
+                local KeybindModule = Creator.NewRoundFrame(8, "Squircle", {
+                    Parent = Objs,
+                    Size = UDim2.new(1, 0, 0, 40),
+                    ImageColor3 = zyColor,
+                    ImageTransparency = 0.3
+                })
+                
+                local KeybindText = Instance.new("TextLabel")
+                KeybindText.Parent = KeybindModule
+                KeybindText.BackgroundTransparency = 1
+                KeybindText.Size = UDim2.new(0.5, 0, 1, 0)
+                KeybindText.Position = UDim2.new(0, 15, 0, 0)
+                KeybindText.Font = Enum.Font.GothamSemibold
+                KeybindText.Text = text
+                KeybindText.TextColor3 = ALcolor
+                KeybindText.TextSize = 15
+                KeybindText.TextXAlignment = Enum.TextXAlignment.Left
+                
+                local KeybindBtn = Creator.NewRoundFrame(6, "Squircle", {
+                    Parent = KeybindModule,
+                    Size = UDim2.new(0, 100, 0, 28),
+                    Position = UDim2.new(1, -115, 0.5, -14),
+                    ImageColor3 = Background,
+                    ImageTransparency = 0.2
+                })
+                
+                local KeybindValue = Instance.new("TextButton")
+                KeybindValue.Parent = KeybindBtn
+                KeybindValue.BackgroundTransparency = 1
+                KeybindValue.Size = UDim2.new(1, 0, 1, 0)
+                KeybindValue.Font = Enum.Font.Gotham
+                KeybindValue.Text = keyTxt
+                KeybindValue.TextColor3 = ALcolor
+                KeybindValue.TextSize = 14
+                KeybindValue.AutoButtonColor = false
+                
+                services.UserInputService.InputBegan:Connect(function(inp, gpe)
+                    if gpe then return end
+                    if inp.UserInputType ~= Enum.UserInputType.Keyboard then return end
+                    if inp.KeyCode ~= bindKey then return end
+                    callback(bindKey.Name)
+                end)
+                
+                KeybindValue.MouseButton1Click:Connect(function()
+                    KeybindValue.Text = "..."
+                    local key = services.UserInputService.InputEnded:Wait()
+                    local keyName = tostring(key.KeyCode.Name)
+                    if key.UserInputType ~= Enum.UserInputType.Keyboard then
+                        KeybindValue.Text = keyTxt
+                        return
+                    end
+                    if banned[keyName] then
+                        KeybindValue.Text = keyTxt
+                        return
+                    end
+                    bindKey = Enum.KeyCode[keyName]
+                    KeybindValue.Text = shortNames[keyName] or keyName
+                end)
+                
+                KeybindValue:GetPropertyChangedSignal("TextBounds"):Connect(function()
+                    KeybindBtn.Size = UDim2.new(0, KeybindValue.TextBounds.X + 30, 0, 28)
+                end)
+            end
+            
+            function section.Textbox(section, text, flag, default, callback)
+                local callback = callback or function() end
+                library.flags[flag] = default or ""
+                
+                local TextboxModule = Creator.NewRoundFrame(8, "Squircle", {
+                    Parent = Objs,
+                    Size = UDim2.new(1, 0, 0, 40),
+                    ImageColor3 = zyColor,
+                    ImageTransparency = 0.3
+                })
+                
+                local TextboxText = Instance.new("TextLabel")
+                TextboxText.Parent = TextboxModule
+                TextboxText.BackgroundTransparency = 1
+                TextboxText.Size = UDim2.new(0.5, 0, 1, 0)
+                TextboxText.Position = UDim2.new(0, 15, 0, 0)
+                TextboxText.Font = Enum.Font.GothamSemibold
+                TextboxText.Text = text
+                TextboxText.TextColor3 = ALcolor
+                TextboxText.TextSize = 15
+                TextboxText.TextXAlignment = Enum.TextXAlignment.Left
+                
+                local BoxBtn = Creator.NewRoundFrame(6, "Squircle", {
+                    Parent = TextboxModule,
+                    Size = UDim2.new(0, 120, 0, 28),
+                    Position = UDim2.new(1, -135, 0.5, -14),
+                    ImageColor3 = Background,
+                    ImageTransparency = 0.2
+                })
+                
+                local TextBox = Instance.new("TextBox")
+                TextBox.Parent = BoxBtn
+                TextBox.BackgroundTransparency = 1
+                TextBox.Size = UDim2.new(1, -20, 1, 0)
+                TextBox.Position = UDim2.new(0, 10, 0, 0)
+                TextBox.Font = Enum.Font.Gotham
+                TextBox.Text = default or ""
+                TextBox.TextColor3 = ALcolor
+                TextBox.TextSize = 14
+                TextBox.ClearTextOnFocus = false
+                
+                TextBox.FocusLost:Connect(function()
+                    if TextBox.Text == "" then TextBox.Text = default end
+                    library.flags[flag] = TextBox.Text
+                    callback(TextBox.Text)
+                end)
+            end
+            
+            function section.Slider(section, text, flag, default, min, max, precise, callback)
+                local callback = callback or function() end
+                local min = min or 1
+                local max = max or 100
+                local default = default or min
+                local precise = precise or false
+                library.flags[flag] = default
+                
+                local SliderModule = Creator.NewRoundFrame(8, "Squircle", {
+                    Parent = Objs,
+                    Size = UDim2.new(1, 0, 0, 50),
+                    ImageColor3 = zyColor,
+                    ImageTransparency = 0.3
+                })
+                
+                local SliderText = Instance.new("TextLabel")
+                SliderText.Parent = SliderModule
+                SliderText.BackgroundTransparency = 1
+                SliderText.Size = UDim2.new(1, -20, 0, 25)
+                SliderText.Position = UDim2.new(0, 15, 0, 5)
+                SliderText.Font = Enum.Font.GothamSemibold
+                SliderText.Text = text
+                SliderText.TextColor3 = ALcolor
+                SliderText.TextSize = 15
+                SliderText.TextXAlignment = Enum.TextXAlignment.Left
+                
+                local SliderBar = Creator.NewRoundFrame(4, "Squircle", {
+                    Parent = SliderModule,
+                    Size = UDim2.new(1, -100, 0, 8),
+                    Position = UDim2.new(0, 15, 0, 32),
+                    ImageColor3 = Background,
+                    ImageTransparency = 0.5
+                })
+                
+                local SliderPart = Creator.NewRoundFrame(4, "Squircle", {
+                    Parent = SliderBar,
+                    Size = UDim2.new((default - min)/(max - min), 0, 1, 0),
+                    ImageColor3 = Color3.fromRGB(129, 90, 220)
+                })
+                
+                local SliderKnob = Creator.NewRoundFrame(8, "Squircle", {
+                    Parent = SliderPart,
+                    Size = UDim2.new(0, 16, 0, 16),
+                    Position = UDim2.new(1, -8, 0.5, -8),
+                    ImageColor3 = Color3.fromRGB(255, 255, 255)
+                })
+                
+                local ValBtn = Creator.NewRoundFrame(6, "Squircle", {
+                    Parent = SliderModule,
+                    Size = UDim2.new(0, 50, 0, 24),
+                    Position = UDim2.new(1, -65, 0, 24),
+                    ImageColor3 = Background,
+                    ImageTransparency = 0.2
+                })
+                
+                local SliderValue = Instance.new("TextBox")
+                SliderValue.Parent = ValBtn
+                SliderValue.BackgroundTransparency = 1
+                SliderValue.Size = UDim2.new(1, 0, 1, 0)
+                SliderValue.Font = Enum.Font.Gotham
+                SliderValue.Text = tostring(default)
+                SliderValue.TextColor3 = ALcolor
+                SliderValue.TextSize = 14
+                
+                local dragging = false
+                local funcs = {}
+                
+                funcs.SetValue = function(self, value)
+                    if value == nil then return end
+                    local percent = (value - min) / (max - min)
+                    percent = math.clamp(percent, 0, 1)
+                    value = precise and tonumber(string.format("%.1f", value)) or math.floor(value + 0.5)
+                    value = math.clamp(value, min, max)
+                    
+                    library.flags[flag] = value
+                    SliderValue.Text = tostring(value)
+                    Tween(SliderPart, {0.1, "Quint", "Out"}, {Size = UDim2.new(percent, 0, 1, 0)})
+                    callback(value)
+                end
+                
+                SliderBar.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                        dragging = true
+                        local percent = math.clamp((input.Position.X - SliderBar.AbsolutePosition.X)/SliderBar.AbsoluteSize.X, 0, 1)
+                        funcs:SetValue(min + (max - min) * percent)
+                    end
+                end)
+                
+                services.UserInputService.InputEnded:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                        dragging = false
+                    end
+                end)
+                
+                services.UserInputService.InputChanged:Connect(function(input)
+                    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                        local percent = math.clamp((input.Position.X - SliderBar.AbsolutePosition.X)/SliderBar.AbsoluteSize.X, 0, 1)
+                        funcs:SetValue(min + (max - min) * percent)
+                    end
+                end)
+                
+                SliderValue.FocusLost:Connect(function()
+                    local val = tonumber(SliderValue.Text) or default
+                    funcs:SetValue(val)
+                end)
+                
+                funcs:SetValue(default)
+                return funcs
+            end
+            
+            function section.Dropdown(section, text, flag, options, callback)
+                local callback = callback or function() end
+                options = options or {}
+                library.flags[flag] = nil
+                
+                local DropdownModule = Creator.NewRoundFrame(8, "Squircle", {
+                    Parent = Objs,
+                    Size = UDim2.new(1, 0, 0, 40),
+                    ImageColor3 = zyColor,
+                    ImageTransparency = 0.3,
+                    ClipsDescendants = true
+                })
+                
+                local DropdownTop = Instance.new("TextButton")
+                DropdownTop.Parent = DropdownModule
+                DropdownTop.BackgroundTransparency = 1
+                DropdownTop.Size = UDim2.new(1, 0, 0, 40)
+                DropdownTop.Text = ""
+                
+                local DropdownText = Instance.new("TextLabel")
+                DropdownText.Parent = DropdownTop
+                DropdownText.BackgroundTransparency = 1
+                DropdownText.Size = UDim2.new(0.6, 0, 1, 0)
+                DropdownText.Position = UDim2.new(0, 15, 0, 0)
+                DropdownText.Font = Enum.Font.GothamSemibold
+                DropdownText.Text = text
+                DropdownText.TextColor3 = ALcolor
+                DropdownText.TextSize = 15
+                DropdownText.TextXAlignment = Enum.TextXAlignment.Left
+                
+                local SelectedText = Instance.new("TextLabel")
+                SelectedText.Parent = DropdownTop
+                SelectedText.BackgroundTransparency = 1
+                SelectedText.Size = UDim2.new(0.3, 0, 1, 0)
+                SelectedText.Position = UDim2.new(0.65, 0, 0, 0)
+                SelectedText.Font = Enum.Font.Gotham
+                SelectedText.Text = "Select..."
+                SelectedText.TextColor3 = Color3.fromRGB(150, 150, 150)
+                SelectedText.TextSize = 14
+                SelectedText.TextXAlignment = Enum.TextXAlignment.Right
+                
+                local Arrow = Instance.new("ImageLabel")
+                Arrow.Parent = DropdownTop
+                Arrow.BackgroundTransparency = 1
+                Arrow.Size = UDim2.new(0, 20, 0, 20)
+                Arrow.Position = UDim2.new(1, -30, 0.5, -10)
+                Arrow.Image = "rbxassetid://7072706633"
+                Arrow.ImageColor3 = Color3.fromRGB(150, 150, 150)
+                
+                local OptionFrame = Instance.new("Frame")
+                OptionFrame.Parent = DropdownModule
+                OptionFrame.BackgroundTransparency = 1
+                OptionFrame.Size = UDim2.new(1, -20, 0, 0)
+                OptionFrame.Position = UDim2.new(0, 10, 0, 45)
+                
+                local OptionList = Instance.new("UIListLayout")
+                OptionList.Parent = OptionFrame
+                OptionList.SortOrder = Enum.SortOrder.LayoutOrder
+                OptionList.Padding = UDim.new(0, 5)
+                
+                local open = false
+                local function Toggle()
+                    open = not open
+                    if open then
+                        Tween(DropdownModule, {0.3, "Quint", "Out"}, {Size = UDim2.new(1, 0, 0, 50 + OptionList.AbsoluteContentSize.Y)})
+                        Tween(Arrow, {0.3, "Quint", "Out"}, {Rotation = 180})
+                    else
+                        Tween(DropdownModule, {0.3, "Quint", "Out"}, {Size = UDim2.new(1, 0, 0, 40)})
+                        Tween(Arrow, {0.3, "Quint", "Out"}, {Rotation = 0})
+                    end
+                end
+                
+                DropdownTop.MouseButton1Click:Connect(Toggle)
+                
+                for _, option in ipairs(options) do
+                    local OptBtn = Creator.NewRoundFrame(6, "Squircle", {
+                        Parent = OptionFrame,
+                        Size = UDim2.new(1, 0, 0, 30),
+                        ImageColor3 = Background,
+                        ImageTransparency = 0.5
+                    })
+                    
+                    local OptText = Instance.new("TextLabel")
+                    OptText.Parent = OptBtn
+                    OptText.BackgroundTransparency = 1
+                    OptText.Size = UDim2.new(1, -20, 1, 0)
+                    OptText.Position = UDim2.new(0, 10, 0, 0)
+                    OptText.Font = Enum.Font.Gotham
+                    OptText.Text = option
+                    OptText.TextColor3 = ALcolor
+                    OptText.TextSize = 14
+                    OptText.TextXAlignment = Enum.TextXAlignment.Left
+                    
+                    local OptHit = Instance.new("TextButton")
+                    OptHit.Parent = OptBtn
+                    OptHit.BackgroundTransparency = 1
+                    OptHit.Size = UDim2.new(1, 0, 1, 0)
+                    OptHit.Text = ""
+                    
+                    OptHit.MouseEnter:Connect(function()
+                        Tween(OptBtn, {0.2, "Quint", "Out"}, {ImageTransparency = 0.3})
+                    end)
+                    OptHit.MouseLeave:Connect(function()
+                        Tween(OptBtn, {0.2, "Quint", "Out"}, {ImageTransparency = 0.5})
+                    end)
+                    OptHit.MouseButton1Click:Connect(function()
+                        SelectedText.Text = option
+                        library.flags[flag] = option
+                        callback(option)
+                        Toggle()
+                    end)
+                end
+                
+                local funcs = {}
+                funcs.AddOption = function(self, opt)
+                    table.insert(options, opt)
+                end
+                funcs.RemoveOption = function(self, opt)
+                    for i, v in ipairs(options) do
+                        if v == opt then table.remove(options, i) break end
+                    end
+                end
+                return funcs
+            end
+            
+            task.wait()
+            if TabVal ~= false then
+                Tween(Section, {0.3, "Quint", "Out"}, {Size = UDim2.new(0.95, 0, 0, 50 + ObjsL.AbsoluteContentSize.Y)})
+            end
+            
+            return section
+        end
+        return tab
+    end
+    return window
+end
+
+return library
