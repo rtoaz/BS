@@ -1,0 +1,1110 @@
+repeat task.wait() until game:IsLoaded()
+
+local WindUIMigration = {}
+WindUIMigration.flags = {}
+WindUIMigration.currentTab = nil
+WindUIMigration.currentSection = nil
+
+local Services = setmetatable({}, {
+    __index = function(t, k)
+        return game:GetService(k)
+    end
+})
+
+local Creator = {}
+
+function Creator.New(className, properties, children)
+    local instance = Instance.new(className)
+    
+    for prop, value in pairs(properties or {}) do
+        if prop ~= "ThemeTag" then
+            instance[prop] = value
+        end
+    end
+    
+    if properties and properties.ThemeTag then
+        for prop, colorName in pairs(properties.ThemeTag) do
+            if type(colorName) == "string" then
+                local colors = {
+                    Background = Color3.fromRGB(30, 30, 30),
+                    Text = Color3.fromRGB(240, 240, 240),
+                    Primary = Color3.fromRGB(129, 90, 220),
+                    Secondary = Color3.fromRGB(88, 101, 242),
+                    ElementBackground = Color3.fromRGB(35, 35, 35),
+                    Icon = Color3.fromRGB(200, 200, 200)
+                }
+                instance[prop] = colors[colorName] or Color3.fromRGB(255, 255, 255)
+            end
+        end
+    end
+    
+    if children then
+        for _, child in ipairs(children) do
+            child.Parent = instance
+        end
+    end
+    
+    return instance
+end
+
+function Creator.NewRoundFrame(cornerRadius, style, properties, children, noOutline)
+    local frame = Creator.New("ImageLabel", {
+        Name = style or "Squircle",
+        BackgroundTransparency = 1,
+        Image = style == "Squircle" and "rbxassetid://8992230677" or "rbxassetid://8992230677",
+        ImageColor3 = properties.ImageColor3 or Color3.fromRGB(255, 255, 255),
+        ImageTransparency = properties.ImageTransparency or 0,
+        ScaleType = Enum.ScaleType.Slice,
+        SliceCenter = Rect.new(99, 99, 99, 99),
+        Size = properties.Size or UDim2.new(1, 0, 1, 0),
+        Position = properties.Position or UDim2.new(0, 0, 0, 0),
+        AnchorPoint = properties.AnchorPoint or Vector2.new(0, 0),
+        ZIndex = properties.ZIndex or 1,
+        Parent = properties.Parent
+    })
+    
+    if not noOutline and style ~= "SquircleOutline" then
+        local outline = Creator.New("ImageLabel", {
+            Name = "Outline",
+            BackgroundTransparency = 1,
+            Image = "rbxassetid://8992230677",
+            ImageColor3 = Color3.fromRGB(129, 90, 220),
+            ImageTransparency = 0.85,
+            ScaleType = Enum.ScaleType.Slice,
+            SliceCenter = Rect.new(99, 99, 99, 99),
+            Size = UDim2.new(1, 0, 1, 0),
+            ZIndex = frame.ZIndex - 1,
+            Parent = frame
+        })
+        
+        local gradient = Creator.New("UIGradient", {
+            Rotation = 45,
+            Color = ColorSequence.new{
+                ColorSequenceKeypoint.new(0, Color3.fromRGB(129, 90, 220)),
+                ColorSequenceKeypoint.new(0.5, Color3.fromRGB(88, 101, 242)),
+                ColorSequenceKeypoint.new(1, Color3.fromRGB(129, 90, 220))
+            },
+            Transparency = NumberSequence.new{
+                NumberSequenceKeypoint.new(0, 0.1),
+                NumberSequenceKeypoint.new(0.5, 1),
+                NumberSequenceKeypoint.new(1, 0.1)
+            },
+            Parent = outline
+        })
+    end
+    
+    if children then
+        for _, child in ipairs(children) do
+            child.Parent = frame
+        end
+    end
+    
+    return frame
+end
+
+function Creator.Tween(obj, timeInfo, properties)
+    local tweenInfo = TweenInfo.new(
+        timeInfo[1], 
+        Enum.EasingStyle[timeInfo[2]], 
+        Enum.EasingDirection[timeInfo[3]]
+    )
+    local tween = Services.TweenService:Create(obj, tweenInfo, properties)
+    tween:Play()
+    return tween
+end
+
+function Creator.Ripple(parent, x, y)
+    task.spawn(function()
+        if not parent then return end
+        
+        local ripple = Creator.New("ImageLabel", {
+            Name = "WindRipple",
+            BackgroundTransparency = 1,
+            Image = "rbxassetid://18941591417",
+            ImageColor3 = Color3.fromRGB(129, 90, 220),
+            ImageTransparency = 0.6,
+            ScaleType = Enum.ScaleType.Fit,
+            Position = UDim2.new(0, x - parent.AbsolutePosition.X - 50, 0, y - parent.AbsolutePosition.Y - 50),
+            Size = UDim2.new(0, 100, 0, 100),
+            ZIndex = 10,
+            Parent = parent
+        })
+        
+        Creator.Tween(ripple, {0.5, "Quint", "Out"}, {
+            Position = UDim2.new(0, x - parent.AbsolutePosition.X - 100, 0, y - parent.AbsolutePosition.Y - 100),
+            Size = UDim2.new(0, 200, 0, 200),
+            ImageTransparency = 1
+        })
+        
+        task.wait(0.5)
+        if ripple then ripple:Destroy() end
+    end)
+end
+
+local Theme = {
+    Background = Color3.fromRGB(25, 25, 25),
+    ElementBG = Color3.fromRGB(35, 35, 35),
+    Primary = Color3.fromRGB(129, 90, 220),
+    Secondary = Color3.fromRGB(88, 101, 242),
+    Text = Color3.fromRGB(240, 240, 240),
+    TextDark = Color3.fromRGB(150, 150, 150),
+    Transparency = 0.1
+}
+
+local function Drag(frame, hold)
+    hold = hold or frame
+    local dragging = false
+    local dragInput
+    local dragStart
+    local startPos
+    
+    local function Update(input)
+        local delta = input.Position - dragStart
+        Creator.Tween(frame, {0.1, "Sine", "Out"}, {
+            Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        })
+    end
+    
+    hold.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            
+            Creator.Tween(frame, {0.1, "Quint", "Out"}, {Size = UDim2.new(frame.Size.X.Scale, frame.Size.X.Offset + 4, frame.Size.Y.Scale, frame.Size.Y.Offset + 4)})
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                    Creator.Tween(frame, {0.2, "Elastic", "Out"}, {Size = UDim2.new(frame.Size.X.Scale, frame.Size.X.Offset - 4, frame.Size.Y.Scale, frame.Size.Y.Offset - 4)})
+                end
+            end)
+        end
+    end)
+    
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+    
+    Services.UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            Update(input)
+        end
+    end)
+end
+
+local switchingTabs = false
+local function SwitchTab(newTabData)
+    if switchingTabs then return end
+    local oldTab = WindUIMigration.currentTab
+    if oldTab == nil then
+        newTabData.Content.Visible = true
+        WindUIMigration.currentTab = newTabData
+        Creator.Tween(newTabData.Button, {0.3, "Quint", "Out"}, {ImageTransparency = 0})
+        Creator.Tween(newTabData.Text, {0.3, "Quint", "Out"}, {TextTransparency = 0})
+        return
+    end
+    
+    if oldTab.Button == newTabData.Button then return end
+    switchingTabs = true
+    
+    Creator.Tween(oldTab.Button, {0.2, "Quint", "Out"}, {ImageTransparency = 0.7})
+    Creator.Tween(oldTab.Text, {0.2, "Quint", "Out"}, {TextTransparency = 0.3})
+    Creator.Tween(newTabData.Button, {0.2, "Quint", "Out"}, {ImageTransparency = 0})
+    Creator.Tween(newTabData.Text, {0.2, "Quint", "Out"}, {TextTransparency = 0})
+    
+    oldTab.Content.Visible = false
+    newTabData.Content.Visible = true
+    
+    WindUIMigration.currentTab = newTabData
+    task.wait(0.2)
+    switchingTabs = false
+end
+
+function WindUIMigration.new(self, name, theme)
+    for _, v in next, Services.CoreGui:GetChildren() do
+        if v.Name == "WindUIMigration" then
+            v:Destroy()
+        end
+    end
+    
+    local MainColor = Color3.fromRGB(25, 25, 25)
+    local Background = Color3.fromRGB(25, 25, 25)
+    local zyColor = Color3.fromRGB(35, 35, 35)
+    
+    local ScreenGui = Creator.New("ScreenGui", {
+        Name = "WindUIMigration",
+        Parent = Services.CoreGui
+    })
+    
+    local Main = Creator.NewRoundFrame(16, "Squircle", {
+        Name = "Main",
+        Parent = ScreenGui,
+        Size = UDim2.new(0, 572, 0, 353),
+        Position = UDim2.new(0.5, -286, 0.5, -176),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        ImageColor3 = Background,
+        ImageTransparency = Theme.Transparency,
+        ZIndex = 2
+    })
+    
+    local UICorner = Creator.New("UICorner", {CornerRadius = UDim.new(0, 12), Parent = Main})
+    
+    local DropShadow = Creator.New("ImageLabel", {
+        Name = "DropShadow",
+        Parent = Main,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        Size = UDim2.new(1, 40, 1, 40),
+        ZIndex = 0,
+        Image = "rbxassetid://8992230677",
+        ImageColor3 = Color3.fromRGB(0, 0, 0),
+        ImageTransparency = 0.6,
+        ScaleType = Enum.ScaleType.Slice,
+        SliceCenter = Rect.new(99, 99, 99, 99)
+    })
+    
+    local TopBar = Creator.New("Frame", {
+        Name = "TopBar",
+        Parent = Main,
+        BackgroundColor3 = Theme.Primary,
+        BorderSizePixel = 0,
+        Size = UDim2.new(1, 0, 0, 2),
+        Position = UDim2.new(0, 0, 0, 0),
+        ZIndex = 3
+    })
+    
+    local TopGradient = Creator.New("UIGradient", {
+        Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(88, 101, 242)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(129, 90, 220)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(88, 101, 242))
+        },
+        Parent = TopBar
+    })
+    
+    local SideBar = Creator.NewRoundFrame(12, "Squircle", {
+        Size = UDim2.new(0, 120, 1, -20),
+        Position = UDim2.new(0, 10, 0, 10),
+        ImageColor3 = zyColor,
+        ImageTransparency = 0.3,
+        Parent = Main,
+        ZIndex = 2
+    })
+    
+    local TitleLabel = Creator.New("TextLabel", {
+        Parent = SideBar,
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 10, 0, 10),
+        Size = UDim2.new(1, -20, 0, 30),
+        Font = Enum.Font.GothamBold,
+        Text = name,
+        TextColor3 = Theme.Text,
+        TextSize = 18,
+        TextXAlignment = Enum.TextXAlignment.Left
+    })
+    
+    local TitleGradient = Creator.New("UIGradient", {
+        Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(129, 90, 220)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(192, 130, 255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(129, 90, 220))
+        },
+        Rotation = 0,
+        Parent = TitleLabel
+    })
+    
+    task.spawn(function()
+        while TitleLabel and TitleLabel.Parent do
+            Creator.Tween(TitleGradient, {3, "Linear", "InOut"}, {Rotation = 180})
+            task.wait(3)
+            Creator.Tween(TitleGradient, {3, "Linear", "InOut"}, {Rotation = 360})
+            task.wait(3)
+        end
+    end)
+    
+    local TabButtons = Creator.New("ScrollingFrame", {
+        Parent = SideBar,
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 5, 0, 50),
+        Size = UDim2.new(1, -10, 1, -60),
+        ScrollBarThickness = 0,
+        CanvasSize = UDim2.new(0, 0, 0, 0)
+    })
+    
+    local TabButtonsList = Creator.New("UIListLayout", {
+        Parent = TabButtons,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Padding = UDim.new(0, 8)
+    })
+    
+    local TabContent = Creator.NewRoundFrame(12, "Squircle", {
+        Parent = Main,
+        Size = UDim2.new(1, -150, 1, -20),
+        Position = UDim2.new(0, 140, 0, 10),
+        ImageColor3 = zyColor,
+        ImageTransparency = 0.2,
+        ZIndex = 2
+    })
+    
+    local OpenButton = Creator.New("ImageButton", {
+        Parent = ScreenGui,
+        BackgroundColor3 = Theme.Primary,
+        Position = UDim2.new(0, 20, 0, 20),
+        Size = UDim2.new(0, 50, 0, 50),
+        Image = "rbxassetid://104756179251351",
+        ImageColor3 = Color3.fromRGB(255, 255, 255),
+        ZIndex = 10
+    })
+    
+    local OpenCorner = Creator.New("UICorner", {CornerRadius = UDim.new(1, 0), Parent = OpenButton})
+    local OpenStroke = Creator.New("UIStroke", {
+        Parent = OpenButton,
+        Color = Theme.Primary,
+        Thickness = 2,
+        Transparency = 0.5
+    })
+    
+    OpenButton.MouseEnter:Connect(function()
+        Creator.Tween(OpenButton, {0.2, "Quint", "Out"}, {Size = UDim2.new(0, 55, 0, 55)})
+        Creator.Tween(OpenStroke, {0.2, "Quint", "Out"}, {Transparency = 0})
+    end)
+    
+    OpenButton.MouseLeave:Connect(function()
+        Creator.Tween(OpenButton, {0.2, "Quint", "Out"}, {Size = UDim2.new(0, 50, 0, 50)})
+        Creator.Tween(OpenStroke, {0.2, "Quint", "Out"}, {Transparency = 0.5})
+    end)
+    
+    OpenButton.MouseButton1Click:Connect(function()
+        Main.Visible = not Main.Visible
+        if Main.Visible then
+            Creator.Tween(Main, {0.3, "Back", "Out"}, {Size = UDim2.new(0, 572, 0, 353)})
+        end
+    end)
+    
+    Drag(Main)
+    
+    local windowObj = {}
+    local tabs = {}
+    
+    function windowObj.Tab(window, tabName, iconId)
+        local tabData = {
+            Name = tabName,
+            Content = nil,
+            Button = nil,
+            Text = nil,
+            Sections = {}
+        }
+        
+        local btnContainer = Creator.NewRoundFrame(8, "Squircle", {
+            Parent = TabButtons,
+            Size = UDim2.new(1, -10, 0, 36),
+            ImageColor3 = Color3.fromRGB(255, 255, 255),
+            ImageTransparency = 1,
+            ZIndex = 3
+        })
+        
+        local btnIcon = Creator.New("ImageLabel", {
+            Parent = btnContainer,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(0, 20, 0, 20),
+            Position = UDim2.new(0, 10, 0.5, -10),
+            Image = iconId and "rbxassetid://" .. iconId or "rbxassetid://70754573667061",
+            ImageColor3 = Theme.Text,
+            ImageTransparency = 0.3
+        })
+        
+        local btnText = Creator.New("TextLabel", {
+            Parent = btnContainer,
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0, 36, 0, 0),
+            Size = UDim2.new(1, -46, 1, 0),
+            Font = Enum.Font.GothamSemibold,
+            Text = tabName,
+            TextColor3 = Theme.Text,
+            TextSize = 14,
+            TextTransparency = 0.3,
+            TextXAlignment = Enum.TextXAlignment.Left
+        })
+        
+        local hitBtn = Creator.New("TextButton", {
+            Parent = btnContainer,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 1, 0),
+            Text = ""
+        })
+        
+        local content = Creator.New("ScrollingFrame", {
+            Parent = TabContent,
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 1, 0),
+            ScrollBarThickness = 2,
+            ScrollBarImageColor3 = Theme.Primary,
+            CanvasSize = UDim2.new(0, 0, 0, 0),
+            Visible = false
+        })
+        
+        local contentList = Creator.New("UIListLayout", {
+            Parent = content,
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            Padding = UDim.new(0, 10),
+            HorizontalAlignment = Enum.HorizontalAlignment.Center
+        })
+        
+        contentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            content.CanvasSize = UDim2.new(0, 0, 0, contentList.AbsoluteContentSize.Y + 20)
+        end)
+        
+        tabData.Content = content
+        tabData.Button = btnContainer
+        tabData.Text = btnText
+        
+        hitBtn.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                Creator.Ripple(btnContainer, input.Position.X, input.Position.Y)
+                SwitchTab(tabData)
+            end
+        end)
+        
+        hitBtn.MouseEnter:Connect(function()
+            if WindUIMigration.currentTab ~= tabData then
+                Creator.Tween(btnContainer, {0.2, "Quint", "Out"}, {ImageTransparency = 0.9})
+                Creator.Tween(btnIcon, {0.2, "Quint", "Out"}, {ImageTransparency = 0.1})
+                Creator.Tween(btnText, {0.2, "Quint", "Out"}, {TextTransparency = 0.1})
+            end
+        end)
+        
+        hitBtn.MouseLeave:Connect(function()
+            if WindUIMigration.currentTab ~= tabData then
+                Creator.Tween(btnContainer, {0.2, "Quint", "Out"}, {ImageTransparency = 1})
+                Creator.Tween(btnIcon, {0.2, "Quint", "Out"}, {ImageTransparency = 0.3})
+                Creator.Tween(btnText, {0.2, "Quint", "Out"}, {TextTransparency = 0.3})
+            end
+        end)
+        
+        if not WindUIMigration.currentTab then
+            SwitchTab(tabData)
+        end
+        
+        local tabObj = {}
+        
+        function tabObj.section(tab, sectionName, defaultOpen)
+            local sectionData = {
+                Name = sectionName,
+                Open = defaultOpen ~= false,
+                Elements = {}
+            }
+            
+            local sectionFrame = Creator.NewRoundFrame(10, "Squircle", {
+                Parent = content,
+                Size = UDim2.new(0.95, 0, 0, 40),
+                ImageColor3 = Theme.ElementBG,
+                ImageTransparency = 0.1,
+                ClipsDescendants = true
+            })
+            
+            local header = Creator.New("TextButton", {
+                Parent = sectionFrame,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 40),
+                Text = ""
+            })
+            
+            local sectionIcon = Creator.New("ImageLabel", {
+                Parent = header,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(0, 20, 0, 20),
+                Position = UDim2.new(0, 15, 0.5, -10),
+                Image = "rbxassetid://110294969167654",
+                ImageColor3 = Theme.Primary
+            })
+            
+            local sectionText = Creator.New("TextLabel", {
+                Parent = header,
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0, 45, 0, 0),
+                Size = UDim2.new(1, -80, 0, 40),
+                Font = Enum.Font.GothamBold,
+                Text = sectionName,
+                TextColor3 = Theme.Text,
+                TextSize = 16,
+                TextXAlignment = Enum.TextXAlignment.Left
+            })
+            
+            local toggleIcon = Creator.New("ImageLabel", {
+                Parent = header,
+                BackgroundTransparency = 1,
+                Size = UDim2.new(0, 20, 0, 20),
+                Position = UDim2.new(1, -35, 0.5, -10),
+                Image = "rbxassetid://7072706633",
+                ImageColor3 = Theme.TextDark,
+                Rotation = defaultOpen ~= false and 180 or 0
+            })
+            
+            local elementContainer = Creator.New("Frame", {
+                Parent = sectionFrame,
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0, 10, 0, 45),
+                Size = UDim2.new(1, -20, 1, -50)
+            })
+            
+            local elementList = Creator.New("UIListLayout", {
+                Parent = elementContainer,
+                SortOrder = Enum.SortOrder.LayoutOrder,
+                Padding = UDim.new(0, 8)
+            })
+            
+            local function UpdateSectionSize()
+                if sectionData.Open then
+                    Creator.Tween(sectionFrame, {0.3, "Quint", "Out"}, {
+                        Size = UDim2.new(0.95, 0, 0, 50 + elementList.AbsoluteContentSize.Y)
+                    })
+                    Creator.Tween(toggleIcon, {0.3, "Quint", "Out"}, {Rotation = 180})
+                else
+                    Creator.Tween(sectionFrame, {0.3, "Quint", "Out"}, {Size = UDim2.new(0.95, 0, 0, 40)})
+                    Creator.Tween(toggleIcon, {0.3, "Quint", "Out"}, {Rotation = 0})
+                end
+            end
+            
+            header.MouseButton1Click:Connect(function()
+                sectionData.Open = not sectionData.Open
+                UpdateSectionSize()
+            end)
+            
+            elementList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                if sectionData.Open then
+                    UpdateSectionSize()
+                end
+            end)
+            
+            local sectionObj = {}
+            
+            function sectionObj.Button(section, text, callback)
+                callback = callback or function() end
+                
+                local btn = Creator.NewRoundFrame(8, "Squircle", {
+                    Parent = elementContainer,
+                    Size = UDim2.new(1, 0, 0, 38),
+                    ImageColor3 = Theme.Primary,
+                    ImageTransparency = 0.7,
+                    Active = true
+                })
+                
+                local btnText = Creator.New("TextLabel", {
+                    Parent = btn,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 1, 0),
+                    Font = Enum.Font.GothamSemibold,
+                    Text = text,
+                    TextColor3 = Theme.Text,
+                    TextSize = 15
+                })
+                
+                btn.MouseEnter:Connect(function()
+                    Creator.Tween(btn, {0.2, "Quint", "Out"}, {ImageTransparency = 0.5})
+                end)
+                
+                btn.MouseLeave:Connect(function()
+                    Creator.Tween(btn, {0.2, "Quint", "Out"}, {ImageTransparency = 0.7})
+                end)
+                
+                btn.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                        Creator.Ripple(btn, input.Position.X, input.Position.Y)
+                        Creator.Tween(btn, {0.1, "Quint", "Out"}, {Size = UDim2.new(1, -4, 0, 34), Position = UDim2.new(0, 2, 0, 2)})
+                        task.wait(0.1)
+                        Creator.Tween(btn, {0.1, "Quint", "Out"}, {Size = UDim2.new(1, 0, 0, 38), Position = UDim2.new(0, 0, 0, 0)})
+                        task.spawn(callback)
+                    end
+                end)
+                
+                return btn
+            end
+            
+            function sectionObj.Label(section, text)
+                local lbl = Creator.NewRoundFrame(6, "Squircle", {
+                    Parent = elementContainer,
+                    Size = UDim2.new(1, 0, 0, 30),
+                    ImageColor3 = Theme.ElementBG,
+                    ImageTransparency = 0.5
+                })
+                
+                Creator.New("TextLabel", {
+                    Parent = lbl,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, -20, 1, 0),
+                    Position = UDim2.new(0, 10, 0, 0),
+                    Font = Enum.Font.Gotham,
+                    Text = text,
+                    TextColor3 = Theme.Text,
+                    TextSize = 14,
+                    TextXAlignment = Enum.TextXAlignment.Left
+                })
+                
+                local obj = {Instance = lbl}
+                function obj.SetText(self, newText)
+                    lbl.TextLabel.Text = newText
+                end
+                return obj
+            end
+            
+            function sectionObj.Toggle(section, text, flag, default, callback)
+                callback = callback or function() end
+                default = default or false
+                WindUIMigration.flags[flag] = default
+                
+                local container = Creator.NewRoundFrame(8, "Squircle", {
+                    Parent = elementContainer,
+                    Size = UDim2.new(1, 0, 0, 40),
+                    ImageColor3 = Theme.ElementBG,
+                    ImageTransparency = 0.3
+                })
+                
+                local lbl = Creator.New("TextLabel", {
+                    Parent = container,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(0.7, 0, 1, 0),
+                    Position = UDim2.new(0, 15, 0, 0),
+                    Font = Enum.Font.GothamSemibold,
+                    Text = text,
+                    TextColor3 = Theme.Text,
+                    TextSize = 15,
+                    TextXAlignment = Enum.TextXAlignment.Left
+                })
+                
+                local toggleBg = Creator.NewRoundFrame(12, "Squircle", {
+                    Parent = container,
+                    Size = UDim2.new(0, 44, 0, 24),
+                    Position = UDim2.new(1, -59, 0.5, -12),
+                    ImageColor3 = Color3.fromRGB(60, 60, 60),
+                    ImageTransparency = 0.3
+                })
+                
+                local toggleKnob = Creator.NewRoundFrame(12, "Squircle", {
+                    Parent = toggleBg,
+                    Size = UDim2.new(0, 20, 0, 20),
+                    Position = UDim2.new(0, 2, 0.5, -10),
+                    ImageColor3 = Color3.fromRGB(255, 255, 255)
+                })
+                
+                local function SetState(state)
+                    WindUIMigration.flags[flag] = state
+                    if state then
+                        Creator.Tween(toggleBg, {0.2, "Quint", "Out"}, {ImageColor3 = Theme.Primary})
+                        Creator.Tween(toggleKnob, {0.2, "Quint", "Out"}, {Position = UDim2.new(0, 22, 0.5, -10)})
+                    else
+                        Creator.Tween(toggleBg, {0.2, "Quint", "Out"}, {ImageColor3 = Color3.fromRGB(60, 60, 60)})
+                        Creator.Tween(toggleKnob, {0.2, "Quint", "Out"}, {Position = UDim2.new(0, 2, 0.5, -10)})
+                    end
+                    callback(state)
+                end
+                
+                local hitArea = Creator.New("TextButton", {
+                    Parent = container,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 1, 0),
+                    Text = ""
+                })
+                
+                hitArea.MouseButton1Click:Connect(function()
+                    SetState(not WindUIMigration.flags[flag])
+                end)
+                
+                if default then
+                    SetState(true)
+                end
+                
+                local funcs = {
+                    SetState = SetState,
+                    Module = container
+                }
+                return funcs
+            end
+            
+            function sectionObj.Keybind(section, text, default, callback)
+                callback = callback or function() end
+                local binding = false
+                local key = default
+                
+                local container = Creator.NewRoundFrame(8, "Squircle", {
+                    Parent := elementContainer,
+                    Size = UDim2.new(1, 0, 0, 40),
+                    ImageColor3 = Theme.ElementBG,
+                    ImageTransparency = 0.3
+                })
+                
+                Creator.New("TextLabel", {
+                    Parent = container,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(0.5, 0, 1, 0),
+                    Position = UDim2.new(0, 15, 0, 0),
+                    Font = Enum.Font.GothamSemibold,
+                    Text = text,
+                    TextColor3 = Theme.Text,
+                    TextSize = 15,
+                    TextXAlignment = Enum.TextXAlignment.Left
+                })
+                
+                local keyBtn = Creator.NewRoundFrame(6, "Squircle", {
+                    Parent = container,
+                    Size = UDim2.new(0, 100, 0, 28),
+                    Position = UDim2.new(1, -115, 0.5, -14),
+                    ImageColor3 = Theme.Background,
+                    ImageTransparency = 0.2
+                })
+                
+                local keyText = Creator.New("TextLabel", {
+                    Parent = keyBtn,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 1, 0),
+                    Font = Enum.Font.Gotham,
+                    Text = default or "None",
+                    TextColor3 = Theme.Text,
+                    TextSize = 13
+                })
+                
+                local hitBtn = Creator.New("TextButton", {
+                    Parent = keyBtn,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 1, 0),
+                    Text = ""
+                })
+                
+                hitBtn.MouseButton1Click:Connect(function()
+                    keyText.Text = "..."
+                    binding = true
+                    local conn
+                    conn = Services.UserInputService.InputEnded:Connect(function(input)
+                        if input.UserInputType == Enum.UserInputType.Keyboard then
+                            key = input.KeyCode.Name
+                            keyText.Text = key
+                            binding = false
+                            conn:Disconnect()
+                        end
+                    end)
+                end)
+                
+                Services.UserInputService.InputBegan:Connect(function(input, gpe)
+                    if gpe or binding then return end
+                    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode.Name == key then
+                        callback(key)
+                    end
+                end)
+            end
+            
+            function sectionObj.Textbox(section, text, flag, default, callback)
+                callback = callback or function() end
+                WindUIMigration.flags[flag] = default or ""
+                
+                local container = Creator.NewRoundFrame(8, "Squircle", {
+                    Parent = elementContainer,
+                    Size = UDim2.new(1, 0, 0, 40),
+                    ImageColor3 = Theme.ElementBG,
+                    ImageTransparency = 0.3
+                })
+                
+                Creator.New("TextLabel", {
+                    Parent = container,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(0.5, 0, 1, 0),
+                    Position = UDim2.new(0, 15, 0, 0),
+                    Font = Enum.Font.GothamSemibold,
+                    Text = text,
+                    TextColor3 = Theme.Text,
+                    TextSize = 15,
+                    TextXAlignment = Enum.TextXAlignment.Left
+                })
+                
+                local inputBg = Creator.NewRoundFrame(6, "Squircle", {
+                    Parent = container,
+                    Size = UDim2.new(0, 120, 0, 28),
+                    Position = UDim2.new(1, -135, 0.5, -14),
+                    ImageColor3 = Theme.Background,
+                    ImageTransparency = 0.2
+                })
+                
+                local textBox = Creator.New("TextBox", {
+                    Parent = inputBg,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, -20, 1, 0),
+                    Position = UDim2.new(0, 10, 0, 0),
+                    Font = Enum.Font.Gotham,
+                    Text = default or "",
+                    TextColor3 = Theme.Text,
+                    TextSize = 13,
+                    ClearTextOnFocus = false
+                })
+                
+                textBox.FocusLost:Connect(function()
+                    WindUIMigration.flags[flag] = textBox.Text
+                    callback(textBox.Text)
+                end)
+            end
+            
+            function sectionObj.Slider(section, text, flag, default, min, max, precise, callback)
+                callback = callback or function() end
+                min = min or 1
+                max = max or 100
+                default = default or min
+                precise = precise or false
+                WindUIMigration.flags[flag] = default
+                
+                local dragging = false
+                
+                local container = Creator.NewRoundFrame(8, "Squircle", {
+                    Parent = elementContainer,
+                    Size = UDim2.new(1, 0, 0, 50),
+                    ImageColor3 = Theme.ElementBG,
+                    ImageTransparency = 0.3
+                })
+                
+                Creator.New("TextLabel", {
+                    Parent = container,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, -20, 0, 25),
+                    Position = UDim2.new(0, 15, 0, 5),
+                    Font = Enum.Font.GothamSemibold,
+                    Text = text,
+                    TextColor3 = Theme.Text,
+                    TextSize = 15,
+                    TextXAlignment = Enum.TextXAlignment.Left
+                })
+                
+                local track = Creator.NewRoundFrame(4, "Squircle", {
+                    Parent = container,
+                    Size = UDim2.new(1, -100, 0, 8),
+                    Position = UDim2.new(0, 15, 0, 32),
+                    ImageColor3 = Theme.Background,
+                    ImageTransparency = 0.5
+                })
+                
+                local fill = Creator.NewRoundFrame(4, "Squircle", {
+                    Parent = track,
+                    Size = UDim2.new((default - min)/(max - min), 0, 1, 0),
+                    ImageColor3 = Theme.Primary
+                })
+                
+                local knob = Creator.NewRoundFrame(8, "Squircle", {
+                    Parent = fill,
+                    Size = UDim2.new(0, 16, 0, 16),
+                    Position = UDim2.new(1, -8, 0.5, -8),
+                    ImageColor3 = Color3.fromRGB(255, 255, 255),
+                    ImageTransparency = 0
+                })
+                
+                local valueBox = Creator.NewRoundFrame(6, "Squircle", {
+                    Parent = container,
+                    Size = UDim2.new(0, 50, 0, 24),
+                    Position = UDim2.new(1, -65, 0, 24),
+                    ImageColor3 = Theme.Background,
+                    ImageTransparency = 0.2
+                })
+                
+                local valueText = Creator.New("TextBox", {
+                    Parent = valueBox,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 1, 0),
+                    Font = Enum.Font.Gotham,
+                    Text = tostring(default),
+                    TextColor3 = Theme.Text,
+                    TextSize = 13
+                })
+                
+                local function UpdateValue(val)
+                    val = math.clamp(val, min, max)
+                    if precise then
+                        val = tonumber(string.format("%.1f", val))
+                    else
+                        val = math.floor(val)
+                    end
+                    
+                    WindUIMigration.flags[flag] = val
+                    valueText.Text = tostring(val)
+                    Creator.Tween(fill, {0.1, "Quint", "Out"}, {
+                        Size = UDim2.new((val - min)/(max - min), 0, 1, 0)
+                    })
+                    callback(val)
+                end
+                
+                track.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        dragging = true
+                        local percent = math.clamp((input.Position.X - track.AbsolutePosition.X)/track.AbsoluteSize.X, 0, 1)
+                        UpdateValue(min + (max - min) * percent)
+                    end
+                end)
+                
+                Services.UserInputService.InputEnded:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        dragging = false
+                    end
+                end)
+                
+                Services.UserInputService.InputChanged:Connect(function(input)
+                    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                        local percent = math.clamp((input.Position.X - track.AbsolutePosition.X)/track.AbsoluteSize.X, 0, 1)
+                        UpdateValue(min + (max - min) * percent)
+                    end
+                end)
+                
+                valueText.FocusLost:Connect(function()
+                    local val = tonumber(valueText.Text) or default
+                    UpdateValue(val)
+                end)
+                
+                local funcs = {
+                    SetValue = UpdateValue
+                }
+                return funcs
+            end
+            
+            function sectionObj.Dropdown(section, text, flag, options, callback)
+                callback = callback or function() end
+                options = options or {}
+                WindUIMigration.flags[flag] = nil
+                
+                local open = false
+                
+                local container = Creator.NewRoundFrame(8, "Squircle", {
+                    Parent = elementContainer,
+                    Size = UDim2.new(1, 0, 0, 40),
+                    ImageColor3 = Theme.ElementBG,
+                    ImageTransparency = 0.3,
+                    ClipsDescendants = true
+                })
+                
+                local header = Creator.New("TextButton", {
+                    Parent = container,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 0, 40),
+                    Text = ""
+                })
+                
+                Creator.New("TextLabel", {
+                    Parent = header,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(0.6, 0, 1, 0),
+                    Position = UDim2.new(0, 15, 0, 0),
+                    Font = Enum.Font.GothamSemibold,
+                    Text = text,
+                    TextColor3 = Theme.Text,
+                    TextSize = 15,
+                    TextXAlignment = Enum.TextXAlignment.Left
+                })
+                
+                local selectedText = Creator.New("TextLabel", {
+                    Parent = header,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(0.3, 0, 1, 0),
+                    Position = UDim2.new(0.65, 0, 0, 0),
+                    Font = Enum.Font.Gotham,
+                    Text = "Select...",
+                    TextColor3 = Theme.TextDark,
+                    TextSize = 14,
+                    TextXAlignment = Enum.TextXAlignment.Right
+                })
+                
+                local arrow = Creator.New("ImageLabel", {
+                    Parent = header,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(0, 20, 0, 20),
+                    Position = UDim2.new(1, -30, 0.5, -10),
+                    Image = "rbxassetid://7072706633",
+                    ImageColor3 = Theme.TextDark,
+                    Rotation = 0
+                })
+                
+                local optionsContainer = Creator.New("Frame", {
+                    Parent = container,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, -20, 0, 0),
+                    Position = UDim2.new(0, 10, 0, 45)
+                })
+                
+                local optionsList = Creator.New("UIListLayout", {
+                    Parent = optionsContainer,
+                    SortOrder = Enum.SortOrder.LayoutOrder,
+                    Padding = UDim.new(0, 5)
+                })
+                
+                local function Toggle()
+                    open = not open
+                    if open then
+                        Creator.Tween(container, {0.3, "Quint", "Out"}, {
+                            Size = UDim2.new(1, 0, 0, 50 + optionsList.AbsoluteContentSize.Y)
+                        })
+                        Creator.Tween(arrow, {0.3, "Quint", "Out"}, {Rotation = 180})
+                    else
+                        Creator.Tween(container, {0.3, "Quint", "Out"}, {Size = UDim2.new(1, 0, 0, 40)})
+                        Creator.Tween(arrow, {0.3, "Quint", "Out"}, {Rotation = 0})
+                    end
+                end
+                
+                header.MouseButton1Click:Connect(Toggle)
+                
+                for _, option in ipairs(options) do
+                    local optBtn = Creator.NewRoundFrame(6, "Squircle", {
+                        Parent = optionsContainer,
+                        Size = UDim2.new(1, 0, 0, 30),
+                        ImageColor3 = Theme.Background,
+                        ImageTransparency = 0.5
+                    })
+                    
+                    Creator.New("TextLabel", {
+                        Parent = optBtn,
+                        BackgroundTransparency = 1,
+                        Size = UDim2.new(1, -20, 1, 0),
+                        Position = UDim2.new(0, 10, 0, 0),
+                        Font = Enum.Font.Gotham,
+                        Text = option,
+                        TextColor3 = Theme.Text,
+                        TextSize = 14,
+                        TextXAlignment = Enum.TextXAlignment.Left
+                    })
+                    
+                    local hit = Creator.New("TextButton", {
+                        Parent = optBtn,
+                        BackgroundTransparency = 1,
+                        Size = UDim2.new(1, 0, 1, 0),
+                        Text = ""
+                    })
+                    
+                    hit.MouseEnter:Connect(function()
+                        Creator.Tween(optBtn, {0.2, "Quint", "Out"}, {ImageTransparency = 0.3})
+                    end)
+                    
+                    hit.MouseLeave:Connect(function()
+                        Creator.Tween(optBtn, {0.2, "Quint", "Out"}, {ImageTransparency = 0.5})
+                    end)
+                    
+                    hit.MouseButton1Click:Connect(function()
+                        selectedText.Text = option
+                        WindUIMigration.flags[flag] = option
+                        callback(option)
+                        Toggle()
+                    end)
+                end
+                
+                local funcs = {
+                    AddOption = function(self, opt) end,
+                    RemoveOption = function(self, opt) end
+                }
+                return funcs
+            end
+            
+            task.wait()
+            UpdateSectionSize()
+            
+            return sectionObj
+        end
+        
+        return tabObj
+    end
+    
+    return windowObj
+end
+
+return WindUIMigration
