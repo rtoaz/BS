@@ -1,0 +1,39 @@
+name: 同步
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 */12 * * *'
+
+jobs:
+  repo-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检查仓库
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: 执行逻辑
+        run: |
+          # 1. 设置身份
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 2. 添加 Gitee 源
+          git remote add upstream https://gitee.com/BS_script/script.git
+          git fetch upstream master
+          
+          # 3. 关键步骤：检出 Gitee 的内容到临时分支
+          git checkout -b temp_sync upstream/master
+          
+          # 4. 把你 GitHub 原有的 .github 目录强制覆盖回这个临时分支
+          # 这样就保证了同步后的代码里依然包含你的 Action 定义
+          git checkout main -- .github/
+          
+          # 5. 提交这个“合并”操作
+          git commit -m "Sync from Gitee and preserve workflow" || echo "No changes to commit"
+          
+          # 6. 将带回了 Workflow 的内容推送到 GitHub 的 main 分支
+          git push "https://${{ github.actor }}:${{ secrets.COPY }}@github.com/${{ github.repository }}.git" temp_sync:main --force
